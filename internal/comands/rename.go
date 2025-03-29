@@ -128,6 +128,8 @@ func processWxExporter(sourcePath string, outputDir string, dryRun bool) error {
 		fmt.Printf("Warning: No subdirectories found in %s\n", sourcePath)
 	}
 
+	sourceName := filepath.Base(sourcePath)
+
 	// Process each path2 directory
 	for _, path2Dir := range path2Dirs {
 		// Get the path2 name (just the directory name, not the full path)
@@ -168,7 +170,7 @@ func processWxExporter(sourcePath string, outputDir string, dryRun bool) error {
 			sequence := sequenceMap[path2Name]
 
 			// Create new filename: path2_sequence with original extension
-			newName := fmt.Sprintf("%s_%03d%s", path2Name, sequence, ext)
+			newName := fmt.Sprintf("%s_%s_%03d%s", sourceName, path2Name, sequence, ext)
 			newPath := filepath.Join(outputDir, newName)
 
 			if dryRun {
