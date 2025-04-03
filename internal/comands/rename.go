@@ -20,6 +20,8 @@ var (
 	ruleType    string
 	sourcePath  string
 	outputDir   string
+	// preName 指定复制文件前缀名,用于rule wx-exporter
+	preName string
 )
 
 // renameCmd represents the rename command
@@ -32,12 +34,13 @@ Example:
   pyrgear rename --dir ./my_files --pattern "file_(\d+)" --replacement "document_$1" --recursive
   pyrgear rename --dir ./my_files --rule "timestamp"
   pyrgear rename --rule "wx-exporter" --source-path "/path/to/source" --output-dir "./output"
+  pyrgear rename --rule "wx-exporter" --source-path "/path/to/source" --output-dir "./output" --pre-name "my_prefix"
   
 This will rename all files matching the pattern "file_(\d+)" to "document_$1" in the ./my_files directory.
 If --recursive is specified, it will also process files in subdirectories.
 If --rule is specified, it will use a predefined renaming rule instead of pattern/replacement.
 For wx-exporter rule, it will extract images from path2/assets/ folders in the specified source directory (path1)
-and copy them to the output directory with names like "path2_001".`,
+and copy them to the output directory with names like "path2_001". `,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Special handling for wx-exporter rule
 		if strings.ToLower(ruleType) == "wx-exporter" {
@@ -94,6 +97,7 @@ func init() {
 	RenameCmd.Flags().StringVar(&ruleType, "rule", "", "Predefined rule for renaming (e.g., 'timestamp', 'sequence', 'lowercase', 'wx-exporter')")
 	RenameCmd.Flags().StringVar(&sourcePath, "source-path", "", "Source path for wx-exporter rule (optional, defaults to current directory)")
 	RenameCmd.Flags().StringVar(&outputDir, "output-dir", "wx-export", "Output directory for wx-exporter rule")
+	RenameCmd.Flags().StringVar(&preName, "pre-name", "", "Predefined name for wx-exporter rule exporter file optional,defaults to source-path")
 }
 
 // processWxExporter processes the wx-exporter rule
@@ -129,6 +133,10 @@ func processWxExporter(sourcePath string, outputDir string, dryRun bool) error {
 	}
 
 	sourceName := filepath.Base(sourcePath)
+	// If preName is specified, use it as the prefix
+	if preName != "" {
+		sourceName = preName
+	}
 
 	// Process each path2 directory
 	for _, path2Dir := range path2Dirs {
@@ -396,4 +404,23 @@ func processDirectory(dir string, re *regexp.Regexp, repl string, recursive bool
 	}
 
 	return nil
+}
+
+func getDirectoryLevels(path string) []string {
+	// 使用 filepath.Split 分割路径
+	var parts []string
+	for {
+		dir, file := filepath.Split(path)
+		if dir == "" && file == "" {
+			break
+		}
+		if file != "" {
+			parts = append([]string{file}, parts...)
+		}
+		path = filepath.Clean(dir)
+		if path == "." || path == "/" || path == "\\" {
+			break
+		}
+	}
+	return parts
 }
