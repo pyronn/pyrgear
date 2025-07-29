@@ -32,4 +32,5 @@ func Execute() {
 func init() {
 	// Add subcommands
 	RootCmd.AddCommand(RenameCmd)
+	RootCmd.AddCommand(ExifCmd)
 }
