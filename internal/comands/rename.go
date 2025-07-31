@@ -24,6 +24,8 @@ var (
 	preName string
 	// foldername-rename rule params
 	parentDir string
+	// prefix for prefix rule
+	prefixName string
 )
 
 // renameCmd represents the rename command
@@ -37,12 +39,14 @@ Example:
   pyrgear rename --dir ./my_files --rule "timestamp"
   pyrgear rename --rule "wx-exporter" --source-path "/path/to/source" --output-dir "./output"
   pyrgear rename --rule "wx-exporter" --source-path "/path/to/source" --output-dir "./output" --pre-name "my_prefix"
+  pyrgear rename --dir ./my_files --rule "prefix" --prefix "photo_"
   
 This will rename all files matching the pattern "file_(\d+)" to "document_$1" in the ./my_files directory.
 If --recursive is specified, it will also process files in subdirectories.
 If --rule is specified, it will use a predefined renaming rule instead of pattern/replacement.
 For wx-exporter rule, it will extract images from path2/assets/ folders in the specified source directory (path1)
-and copy them to the output directory with names like "path2_001". `,
+and copy them to the output directory with names like "path2_001".
+For prefix rule, it will add the specified prefix to all files/directories in the target directory. `,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Special handling for wx-exporter rule
 		if strings.ToLower(ruleType) == "wx-exporter" {
@@ -130,7 +134,7 @@ func init() {
 	RenameCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be renamed without actually renaming")
 	RenameCmd.Flags().StringVar(
 		&ruleType, "rule", "",
-		"Predefined rule for renaming (e.g., 'timestamp', 'sequence', 'lowercase', 'wx-exporter')",
+		"Predefined rule for renaming (e.g., 'timestamp', 'sequence', 'lowercase', 'wx-exporter', 'prefix')",
 	)
 	RenameCmd.Flags().StringVar(
 		&sourcePath, "source-path", "", "Source path for wx-exporter rule (optional, defaults to current directory)",
@@ -140,6 +144,7 @@ func init() {
 		&preName, "pre-name", "", "Predefined name for wx-exporter rule exporter file optional,defaults to source-path",
 	)
 	RenameCmd.Flags().StringVar(&parentDir, "pdir", "", "Parent directory for foldername-rename rule (batch mode)")
+	RenameCmd.Flags().StringVar(&prefixName, "prefix", "", "Prefix string for prefix rule")
 }
 
 // processWxExporter processes the wx-exporter rule
@@ -394,6 +399,54 @@ func processDirectoryWithRule(dir string, rule string, recursive bool, dryRun bo
 				fmt.Printf("Renaming: %s -> %s\n", oldPath, newPath)
 				if err := os.Rename(oldPath, newPath); err != nil {
 					fmt.Printf("Error renaming %s: %v\n", oldPath, err)
+				}
+			}
+		}
+
+	case "prefix":
+		// Add prefix to all files and directories
+		if prefixName == "" {
+			return fmt.Errorf("prefix is required for prefix rule, use --prefix flag")
+		}
+		for _, entry := range entries {
+			// Check if name already has the prefix
+			if strings.HasPrefix(entry.Name(), prefixName) {
+				// Skip if already has prefix
+				if entry.IsDir() && recursive {
+					if err := processDirectoryWithRule(
+						filepath.Join(dir, entry.Name()), rule, recursive, dryRun,
+					); err != nil {
+						fmt.Printf("Warning: %v\n", err)
+					}
+				}
+				continue
+			}
+
+			// Add prefix to the name
+			newName := prefixName + entry.Name()
+			oldPath := filepath.Join(dir, entry.Name())
+			newPath := filepath.Join(dir, newName)
+
+			if dryRun {
+				fmt.Printf("Would rename: %s -> %s\n", oldPath, newPath)
+			} else {
+				fmt.Printf("Renaming: %s -> %s\n", oldPath, newPath)
+				if err := os.Rename(oldPath, newPath); err != nil {
+					fmt.Printf("Error renaming %s: %v\n", oldPath, err)
+				}
+			}
+
+			// Process subdirectories recursively if needed
+			if entry.IsDir() && recursive {
+				// Use old path for dry-run, new path for actual run
+				dirPath := oldPath
+				if !dryRun {
+					dirPath = newPath
+				}
+				if err := processDirectoryWithRule(
+					dirPath, rule, recursive, dryRun,
+				); err != nil {
+					fmt.Printf("Warning: %v\n", err)
 				}
 			}
 		}
