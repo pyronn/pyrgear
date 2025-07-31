@@ -22,6 +22,8 @@ var (
 	outputDir   string
 	// preName 指定复制文件前缀名,用于rule wx-exporter
 	preName string
+	// foldername-rename rule params
+	parentDir string
 )
 
 // renameCmd represents the rename command
@@ -49,6 +51,38 @@ and copy them to the output directory with names like "path2_001". `,
 				fmt.Printf("Error processing wx-exporter: %v\n", err)
 			}
 			return
+		}
+
+		// Special handling for foldername-rename rule
+		if strings.ToLower(ruleType) == "foldername-rename" {
+			if (directory == "" && parentDir == "") || (directory != "" && parentDir != "") {
+				fmt.Println("Error: You must specify either --dir or --pdir, but not both, for foldername-rename rule.")
+				return
+			}
+			if directory != "" {
+				err := processFoldernameRename(directory, dryRun)
+				if err != nil {
+					fmt.Printf("Error processing foldername-rename: %v\n", err)
+				}
+				return
+			}
+			if parentDir != "" {
+				entries, err := os.ReadDir(parentDir)
+				if err != nil {
+					fmt.Printf("Error reading parent directory: %v\n", err)
+					return
+				}
+				for _, entry := range entries {
+					if entry.IsDir() {
+						dirPath := filepath.Join(parentDir, entry.Name())
+						err := processFoldernameRename(dirPath, dryRun)
+						if err != nil {
+							fmt.Printf("Error processing %s: %v\n", dirPath, err)
+						}
+					}
+				}
+				return
+			}
 		}
 
 		if directory == "" {
@@ -94,10 +128,18 @@ func init() {
 	RenameCmd.Flags().StringVar(&replacement, "replacement", "", "Replacement pattern for new filenames")
 	RenameCmd.Flags().BoolVar(&recursive, "recursive", false, "Process subdirectories recursively")
 	RenameCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be renamed without actually renaming")
-	RenameCmd.Flags().StringVar(&ruleType, "rule", "", "Predefined rule for renaming (e.g., 'timestamp', 'sequence', 'lowercase', 'wx-exporter')")
-	RenameCmd.Flags().StringVar(&sourcePath, "source-path", "", "Source path for wx-exporter rule (optional, defaults to current directory)")
+	RenameCmd.Flags().StringVar(
+		&ruleType, "rule", "",
+		"Predefined rule for renaming (e.g., 'timestamp', 'sequence', 'lowercase', 'wx-exporter')",
+	)
+	RenameCmd.Flags().StringVar(
+		&sourcePath, "source-path", "", "Source path for wx-exporter rule (optional, defaults to current directory)",
+	)
 	RenameCmd.Flags().StringVar(&outputDir, "output-dir", "wx-export", "Output directory for wx-exporter rule")
-	RenameCmd.Flags().StringVar(&preName, "pre-name", "", "Predefined name for wx-exporter rule exporter file optional,defaults to source-path")
+	RenameCmd.Flags().StringVar(
+		&preName, "pre-name", "", "Predefined name for wx-exporter rule exporter file optional,defaults to source-path",
+	)
+	RenameCmd.Flags().StringVar(&parentDir, "pdir", "", "Parent directory for foldername-rename rule (batch mode)")
 }
 
 // processWxExporter processes the wx-exporter rule
@@ -259,7 +301,9 @@ func processDirectoryWithRule(dir string, rule string, recursive bool, dryRun bo
 		for _, entry := range entries {
 			if entry.IsDir() {
 				if recursive {
-					if err := processDirectoryWithRule(filepath.Join(dir, entry.Name()), rule, recursive, dryRun); err != nil {
+					if err := processDirectoryWithRule(
+						filepath.Join(dir, entry.Name()), rule, recursive, dryRun,
+					); err != nil {
 						fmt.Printf("Warning: %v\n", err)
 					}
 				}
@@ -294,7 +338,9 @@ func processDirectoryWithRule(dir string, rule string, recursive bool, dryRun bo
 		for i, entry := range entries {
 			if entry.IsDir() {
 				if recursive {
-					if err := processDirectoryWithRule(filepath.Join(dir, entry.Name()), rule, recursive, dryRun); err != nil {
+					if err := processDirectoryWithRule(
+						filepath.Join(dir, entry.Name()), rule, recursive, dryRun,
+					); err != nil {
 						fmt.Printf("Warning: %v\n", err)
 					}
 				}
@@ -323,7 +369,9 @@ func processDirectoryWithRule(dir string, rule string, recursive bool, dryRun bo
 		for _, entry := range entries {
 			if entry.IsDir() {
 				if recursive {
-					if err := processDirectoryWithRule(filepath.Join(dir, entry.Name()), rule, recursive, dryRun); err != nil {
+					if err := processDirectoryWithRule(
+						filepath.Join(dir, entry.Name()), rule, recursive, dryRun,
+					); err != nil {
 						fmt.Printf("Warning: %v\n", err)
 					}
 				}
@@ -403,6 +451,43 @@ func processDirectory(dir string, re *regexp.Regexp, repl string, recursive bool
 		}
 	}
 
+	return nil
+}
+
+// processFoldernameRename renames all files in a directory to foldername_序号.扩展名
+func processFoldernameRename(targetDir string, dryRun bool) error {
+	info, err := os.Stat(targetDir)
+	if err != nil {
+		return fmt.Errorf("failed to access directory %s: %v", targetDir, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("%s is not a directory", targetDir)
+	}
+	folderName := filepath.Base(targetDir)
+	entries, err := os.ReadDir(targetDir)
+	if err != nil {
+		return fmt.Errorf("failed to read directory %s: %v", targetDir, err)
+	}
+	seq := 1
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		oldPath := filepath.Join(targetDir, entry.Name())
+		ext := filepath.Ext(entry.Name())
+		newName := fmt.Sprintf("%s_%03d%s", folderName, seq, ext)
+		newPath := filepath.Join(targetDir, newName)
+		if dryRun {
+			fmt.Printf("Would rename: %s -> %s\n", oldPath, newPath)
+		} else {
+			fmt.Printf("Renaming: %s -> %s\n", oldPath, newPath)
+			err := os.Rename(oldPath, newPath)
+			if err != nil {
+				fmt.Printf("Error renaming %s: %v\n", oldPath, err)
+			}
+		}
+		seq++
+	}
 	return nil
 }
 
