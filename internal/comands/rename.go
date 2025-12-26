@@ -26,6 +26,8 @@ var (
 	parentDir string
 	// prefix for prefix rule
 	prefixName string
+	// sequenceName for sequence rule - custom name prefix
+	sequenceName string
 )
 
 // renameCmd represents the rename command
@@ -37,6 +39,7 @@ var RenameCmd = &cobra.Command{
 Example:
   pyrgear rename --dir ./my_files --pattern "file_(\d+)" --replacement "document_$1" --recursive
   pyrgear rename --dir ./my_files --rule "timestamp"
+  pyrgear rename --dir ./my_files --rule "sequence" --sequence-name "photo"
   pyrgear rename --rule "wx-exporter" --source-path "/path/to/source" --output-dir "./output"
   pyrgear rename --rule "wx-exporter" --source-path "/path/to/source" --output-dir "./output" --pre-name "my_prefix"
   pyrgear rename --dir ./my_files --rule "prefix" --prefix "photo_"
@@ -145,6 +148,9 @@ func init() {
 	)
 	RenameCmd.Flags().StringVar(&parentDir, "pdir", "", "Parent directory for foldername-rename rule (batch mode)")
 	RenameCmd.Flags().StringVar(&prefixName, "prefix", "", "Prefix string for prefix rule")
+	RenameCmd.Flags().StringVar(
+		&sequenceName, "sequence-name", "", "Custom name prefix for sequence rule (optional, defaults to 'file')",
+	)
 }
 
 // processWxExporter processes the wx-exporter rule
@@ -340,6 +346,11 @@ func processDirectoryWithRule(dir string, rule string, recursive bool, dryRun bo
 
 	case "sequence":
 		// Rename files with sequential numbers
+		// Use custom name if provided, otherwise default to "file"
+		namePrefix := "file"
+		if sequenceName != "" {
+			namePrefix = sequenceName
+		}
 		for i, entry := range entries {
 			if entry.IsDir() {
 				if recursive {
@@ -355,7 +366,7 @@ func processDirectoryWithRule(dir string, rule string, recursive bool, dryRun bo
 			// Get file extension
 			ext := filepath.Ext(entry.Name())
 			// Create new name with sequence number
-			newName := fmt.Sprintf("file_%03d%s", i+1, ext)
+			newName := fmt.Sprintf("%s_%03d%s", namePrefix, i+1, ext)
 			oldPath := filepath.Join(dir, entry.Name())
 			newPath := filepath.Join(dir, newName)
 
